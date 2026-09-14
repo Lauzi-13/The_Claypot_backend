@@ -233,3 +233,23 @@ type GalleryImage struct {
 }
 
 func (GalleryImage) TableName() string { return "gallery_images" }
+
+// Raw ingredient/stock tracking for the food side of the Stock page —
+// deliberately NOT a Product. A Product with kind=meal shows up on the
+// public Menu page grouped by category with a price; a StockItem never
+// does. They're a different concept on purpose: the menu sells dishes
+// ("Beef Stew"), stock counts ingredients ("Beef") — the two aren't
+// even in a 1:1 relationship, so this table isn't linked to Product at
+// all, and completing an order does not touch it. Staff keep it in sync
+// by hand via the toggle/quantity update, same as any real kitchen.
+// Quantity nil + OutOfStock false/true is the same "can't really count
+// it" pattern as Product (village chicken, chikanda...).
+type StockItem struct {
+	ID         string    `gorm:"primaryKey" json:"id"`
+	Name       string    `json:"name"`
+	Quantity   *int      `json:"quantity"`
+	OutOfStock bool      `gorm:"column:out_of_stock;default:false" json:"outOfStock"`
+	CreatedAt  time.Time `gorm:"column:created_at" json:"createdAt"`
+}
+
+func (StockItem) TableName() string { return "stock_items" }

@@ -57,10 +57,12 @@ func main() {
 	meals, drinks := seedProducts(db)
 	createdStaffUser := seedStaffUser(db)
 	galleryCount := seedGalleryImages(db)
+	stockItemCount := seedStockItems(db)
 
 	fmt.Printf("Seeded %d drink categories and %d meal categories.\n", len(drinkCategories), len(mealCategories))
 	fmt.Printf("Seeded %d new meals and %d new drinks (skipped any that already existed).\n", meals, drinks)
 	fmt.Printf("Seeded %d gallery images (skipped if the table already had any).\n", galleryCount)
+	fmt.Printf("Seeded %d stock items (skipped if the table already had any).\n", stockItemCount)
 	if createdStaffUser {
 		fmt.Println("Created the initial staff login (see seed/staffuser.go for the username — password was set when you asked for this, not printed here).")
 	} else {

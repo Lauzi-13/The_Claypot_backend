@@ -58,12 +58,14 @@ func main() {
 	categoriesHandler := &routes.CategoriesHandler{DB: conn}
 	ordersHandler := &routes.OrdersHandler{DB: conn}
 	galleryHandler := &routes.GalleryHandler{DB: conn}
+	stockItemsHandler := &routes.StockItemsHandler{DB: conn}
 
 	r.Mount("/api/auth", authHandler.Routes())
 	r.Mount("/api/products", productsHandler.Routes(requireAuth))
 	r.Mount("/api/categories", categoriesHandler.Routes(requireAuth))
 	r.Mount("/api/orders", ordersHandler.Routes(requireAuth))
 	r.Mount("/api/gallery", galleryHandler.Routes(requireAuth))
+	r.With(requireAuth).Mount("/api/stock-items", stockItemsHandler.Routes())
 
 	port := os.Getenv("PORT")
 	if port == "" {
