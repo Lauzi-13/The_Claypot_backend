@@ -218,3 +218,18 @@ type Setting struct {
 }
 
 func (Setting) TableName() string { return "settings" }
+
+// A photo on the public Gallery page. ImageURL is either a path to one of
+// the site's existing static assets (the original seeded photos) or a
+// compressed base64 data URL for anything staff upload afterward — same
+// dual approach Product.ImageURL already uses, chosen per-row by whatever
+// was actually passed in, not by a separate flag.
+type GalleryImage struct {
+	ID        string    `gorm:"primaryKey" json:"id"`
+	ImageURL  string    `gorm:"column:image_url" json:"imageUrl"`
+	Category  string    `json:"category"` // "aesthetic" or "food" — matches the Gallery page's tabs
+	Caption   *string   `json:"caption"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"createdAt"`
+}
+
+func (GalleryImage) TableName() string { return "gallery_images" }

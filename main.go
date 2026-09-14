@@ -57,11 +57,13 @@ func main() {
 	productsHandler := &routes.ProductsHandler{DB: conn}
 	categoriesHandler := &routes.CategoriesHandler{DB: conn}
 	ordersHandler := &routes.OrdersHandler{DB: conn}
+	galleryHandler := &routes.GalleryHandler{DB: conn}
 
 	r.Mount("/api/auth", authHandler.Routes())
 	r.Mount("/api/products", productsHandler.Routes(requireAuth))
 	r.Mount("/api/categories", categoriesHandler.Routes(requireAuth))
 	r.Mount("/api/orders", ordersHandler.Routes(requireAuth))
+	r.Mount("/api/gallery", galleryHandler.Routes(requireAuth))
 
 	port := os.Getenv("PORT")
 	if port == "" {
