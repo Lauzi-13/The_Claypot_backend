@@ -27,6 +27,8 @@ func (h *CategoriesHandler) Routes(requireAuth func(http.Handler) http.Handler) 
 		r.Use(requireAuth)
 		r.Post("/meal", h.createMeal)
 		r.Post("/drink", h.createDrink)
+		r.Delete("/meal/{name}", h.deleteMeal)
+		r.Delete("/drink/{key}", h.deleteDrink)
 	})
 	return r
 }
@@ -143,4 +145,26 @@ func (h *CategoriesHandler) createDrink(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"category": created})
+}
+
+// DELETE /api/categories/meal/:name — any meals already using this category
+// keep their category text as-is; it just won't appear as a pickable
+// option anymore.
+func (h *CategoriesHandler) deleteMeal(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if err := h.DB.Delete(&models.MealCategory{}, "name = ?", name).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "Something went wrong. Please try again.")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// DELETE /api/categories/drink/:key — same deal as deleteMeal above.
+func (h *CategoriesHandler) deleteDrink(w http.ResponseWriter, r *http.Request) {
+	key := chi.URLParam(r, "key")
+	if err := h.DB.Delete(&models.DrinkCategory{}, "key = ?", key).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "Something went wrong. Please try again.")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
