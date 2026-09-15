@@ -239,11 +239,14 @@ func (GalleryImage) TableName() string { return "gallery_images" }
 // public Menu page grouped by category with a price; a StockItem never
 // does. They're a different concept on purpose: the menu sells dishes
 // ("Beef Stew"), stock counts ingredients ("Beef") — the two aren't
-// even in a 1:1 relationship, so this table isn't linked to Product at
-// all, and completing an order does not touch it. Staff keep it in sync
-// by hand via the toggle/quantity update, same as any real kitchen.
-// Quantity nil + OutOfStock false/true is the same "can't really count
-// it" pattern as Product (village chicken, chikanda...).
+// even in a 1:1 relationship, which is exactly why decrementing this on
+// order completion goes through the ProductIngredient recipe below rather
+// than by name or by a direct link to Product. Staff still keep it in
+// sync by hand for anything with no recipe attached (or restocking after
+// a delivery), same as any real kitchen. Quantity nil + OutOfStock
+// false/true is the same "can't really count it" pattern as Product
+// (village chicken, chikanda...) — a nil-quantity StockItem is skipped
+// during decrement and just toggled by hand instead.
 type StockItem struct {
 	ID         string    `gorm:"primaryKey" json:"id"`
 	Name       string    `json:"name"`
@@ -253,3 +256,20 @@ type StockItem struct {
 }
 
 func (StockItem) TableName() string { return "stock_items" }
+
+// The recipe link between a menu Product and the raw StockItem(s) it's made
+// from — e.g. "Village Chicken Stew" consumes 1 unit of the "Village
+// Chicken" stock item per order. Qty is in whatever unit that StockItem is
+// counted in (see StockItem's comment) — staff decide the unit, e.g.
+// tracking "Village Chicken" in servings rather than whole birds is what
+// makes "1 order = 1 unit" true even though one raw chicken serves several
+// orders. A StockItem with Quantity nil (untracked) is simply skipped when
+// completing an order, same as an untracked Product.
+type ProductIngredient struct {
+	ID          string `gorm:"primaryKey" json:"id"`
+	ProductID   string `gorm:"column:product_id;uniqueIndex:idx_product_ingredient" json:"productId"`
+	StockItemID string `gorm:"column:stock_item_id;uniqueIndex:idx_product_ingredient" json:"stockItemId"`
+	Qty         int    `json:"qty"`
+}
+
+func (ProductIngredient) TableName() string { return "product_ingredients" }

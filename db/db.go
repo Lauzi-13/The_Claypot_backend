@@ -44,6 +44,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Setting{},
 		&models.GalleryImage{},
 		&models.StockItem{},
+		&models.ProductIngredient{},
 	)
 	if err != nil {
 		return fmt.Errorf("running auto-migration: %w", err)

@@ -92,6 +92,14 @@ Same endpoints as the old Node backend, same behaviour:
 - `PATCH /api/products/:id/stock/add` — the Stock page's "Update Stock"
   action: add newly delivered quantity on top of what's already on hand
   (`{ qty }`). Both stock routes flip `outOfStock` on automatically at zero.
+- `GET/PUT /api/products/:id/ingredients` — the recipe linking a menu item
+  to the raw `StockItem`(s) it's made from (`{ ingredients: [{stockItemId,
+  qty}] }`, PUT replaces the whole list). `qty` is per order, in whatever
+  unit that StockItem is counted in — e.g. tracking "Village Chicken" in
+  servings rather than whole birds is what makes "1 order = 1 unit" true.
+- `GET/POST /api/stock-items`, `PATCH/DELETE /:id` — raw ingredient stock
+  for the Stock page (`{ name, quantity }`; `quantity: null` leaves it
+  untracked, toggled by hand instead — see `models.StockItem`).
 - `GET/POST /api/categories/meal` — list meal categories (plain strings) /
   add a new one (`{ label }`). A category can exist before any product uses
   it, same as the Add Meal form on the frontend.
@@ -101,7 +109,9 @@ Same endpoints as the old Node backend, same behaviour:
 - `GET/POST /api/orders`, plus `PATCH /:id/arrive|complete|cancel|renew|
   renew-cancelled` and `POST /:id/payments` — the full order lifecycle.
   Completing an order (`/:id/complete`) is what decrements stock for any
-  tracked product in it — not placing the order.
+  tracked product in it — not placing the order. It also walks each item's
+  recipe (`ProductIngredient`) and decrements the linked raw `StockItem`(s)
+  by the same amount, so ingredient stock reflects actual sales too.
 - `GET /api/orders/phone?number=...` — look up an order by customer phone.
   One deliberate difference from the old backend: this is a query
   parameter, not `/phone/:phone` — a phone number can contain a "+", and

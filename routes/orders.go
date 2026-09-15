@@ -107,15 +107,51 @@ func decrementStockForItems(tx *gorm.DB, items []models.OrderItem) error {
 		if err := tx.First(&product, "id = ?", *item.ProductID).Error; err != nil {
 			continue // product may have been deleted since the order was placed
 		}
-		if product.StockQty == nil {
+		if product.StockQty != nil {
+			qty := *product.StockQty - item.Qty
+			if qty < 0 {
+				qty = 0
+			}
+			if err := tx.Model(&product).Updates(map[string]interface{}{
+				"stock_qty":    qty,
+				"out_of_stock": qty <= 0,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		if err := decrementIngredientsForProduct(tx, product.ID, item.Qty); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// decrementIngredientsForProduct walks the product's recipe (see
+// ProductIngredient) and takes orderQty * each ingredient's per-order qty
+// off the linked raw StockItem — this is what lets completing an order
+// count down actual ingredients (beans, village chicken, ...) instead of
+// just the menu item's own sell count. A StockItem left untracked
+// (Quantity nil — the "can't really count it" case) is skipped, same
+// nil-safety as the Product decrement above.
+func decrementIngredientsForProduct(tx *gorm.DB, productID string, orderQty int) error {
+	var links []models.ProductIngredient
+	if err := tx.Where("product_id = ?", productID).Find(&links).Error; err != nil {
+		return err
+	}
+	for _, link := range links {
+		var stockItem models.StockItem
+		if err := tx.First(&stockItem, "id = ?", link.StockItemID).Error; err != nil {
+			continue // stock item may have been deleted since the recipe was set
+		}
+		if stockItem.Quantity == nil {
 			continue
 		}
-		qty := *product.StockQty - item.Qty
+		qty := *stockItem.Quantity - (link.Qty * orderQty)
 		if qty < 0 {
 			qty = 0
 		}
-		if err := tx.Model(&product).Updates(map[string]interface{}{
-			"stock_qty":    qty,
+		if err := tx.Model(&stockItem).Updates(map[string]interface{}{
+			"quantity":     qty,
 			"out_of_stock": qty <= 0,
 		}).Error; err != nil {
 			return err

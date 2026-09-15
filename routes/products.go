@@ -28,6 +28,8 @@ func (h *ProductsHandler) Routes(requireAuth func(http.Handler) http.Handler) ch
 		r.Delete("/{id}", h.delete)
 		r.Patch("/{id}/stock", h.setStock)
 		r.Patch("/{id}/stock/add", h.addStock)
+		r.Get("/{id}/ingredients", h.getIngredients)
+		r.Put("/{id}/ingredients", h.setIngredients)
 	})
 	return r
 }
@@ -162,6 +164,123 @@ func (h *ProductsHandler) setStock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, product)
+}
+
+// ingredientDTO is what the frontend actually needs to render the recipe
+// editor — the raw ProductIngredient row plus the stock item's own name and
+// current quantity, so the page doesn't need a second round trip to label
+// each row.
+type ingredientDTO struct {
+	ID                  string `json:"id"`
+	StockItemID         string `json:"stockItemId"`
+	StockItemName       string `json:"stockItemName"`
+	Qty                 int    `json:"qty"`
+	StockItemQty        *int   `json:"stockItemQty"`
+	StockItemOutOfStock bool   `json:"stockItemOutOfStock"`
+}
+
+func loadIngredientDTOs(db *gorm.DB, productID string) ([]ingredientDTO, error) {
+	var links []models.ProductIngredient
+	if err := db.Where("product_id = ?", productID).Find(&links).Error; err != nil {
+		return nil, err
+	}
+	if len(links) == 0 {
+		return []ingredientDTO{}, nil
+	}
+	stockItemIDs := make([]string, len(links))
+	for i, l := range links {
+		stockItemIDs[i] = l.StockItemID
+	}
+	var stockItems []models.StockItem
+	if err := db.Where("id IN ?", stockItemIDs).Find(&stockItems).Error; err != nil {
+		return nil, err
+	}
+	stockItemByID := make(map[string]models.StockItem, len(stockItems))
+	for _, s := range stockItems {
+		stockItemByID[s.ID] = s
+	}
+	dtos := make([]ingredientDTO, 0, len(links))
+	for _, l := range links {
+		s, ok := stockItemByID[l.StockItemID]
+		if !ok {
+			continue // the stock item was deleted since this link was made
+		}
+		dtos = append(dtos, ingredientDTO{
+			ID: l.ID, StockItemID: l.StockItemID, StockItemName: s.Name, Qty: l.Qty,
+			StockItemQty: s.Quantity, StockItemOutOfStock: s.OutOfStock,
+		})
+	}
+	return dtos, nil
+}
+
+// GET /api/products/:id/ingredients — the recipe: which raw StockItems this
+// menu item is made from, and how many units of each one order consumes.
+func (h *ProductsHandler) getIngredients(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	dtos, err := loadIngredientDTOs(h.DB, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Something went wrong. Please try again.")
+		return
+	}
+	writeJSON(w, http.StatusOK, dtos)
+}
+
+type setIngredientsBody struct {
+	Ingredients []struct {
+		StockItemID string `json:"stockItemId"`
+		Qty         int    `json:"qty"`
+	} `json:"ingredients"`
+}
+
+// PUT /api/products/:id/ingredients { ingredients: [{stockItemId, qty}] } —
+// replaces the whole recipe for this product in one call, which is simpler
+// for the staff-facing editor than individual add/remove endpoints. Qty
+// must be at least 1; a stock item can only appear once (last one wins if
+// the client sends a duplicate).
+func (h *ProductsHandler) setIngredients(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var body setIngredientsBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request body.")
+		return
+	}
+	var product models.Product
+	if err := h.DB.First(&product, "id = ?", id).Error; err != nil {
+		writeError(w, http.StatusNotFound, "Product not found.")
+		return
+	}
+
+	deduped := make(map[string]int, len(body.Ingredients))
+	for _, i := range body.Ingredients {
+		if i.StockItemID == "" || i.Qty < 1 {
+			continue
+		}
+		deduped[i.StockItemID] = i.Qty
+	}
+
+	err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("product_id = ?", id).Delete(&models.ProductIngredient{}).Error; err != nil {
+			return err
+		}
+		for stockItemID, qty := range deduped {
+			link := models.ProductIngredient{ID: uuid.NewString(), ProductID: id, StockItemID: stockItemID, Qty: qty}
+			if err := tx.Create(&link).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Something went wrong. Please try again.")
+		return
+	}
+
+	dtos, err := loadIngredientDTOs(h.DB, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Something went wrong. Please try again.")
+		return
+	}
+	writeJSON(w, http.StatusOK, dtos)
 }
 
 // PATCH /api/products/:id/stock/add { qty } — the Stock page's "Update
